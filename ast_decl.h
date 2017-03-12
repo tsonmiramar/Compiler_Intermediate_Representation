@@ -25,6 +25,8 @@ class Stmt;
 
 void yyerror(const char *msg);
 
+llvm::Type* GetllvmType(Type* ast_type);
+
 class Decl : public Node 
 {
   protected:
@@ -53,6 +55,8 @@ class VarDecl : public Decl
     const char *GetPrintNameForNode() { return "VarDecl"; }
     void PrintChildren(int indentLevel);
     Type *GetType() const { return type; }
+
+    virtual void Emit();
 };
 
 class VarDeclError : public VarDecl

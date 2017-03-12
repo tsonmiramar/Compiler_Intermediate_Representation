@@ -7,6 +7,32 @@
 #include "ast_stmt.h"
 #include "symtable.h"        
          
+llvm::Type* GetllvmType(Type* ast_type){
+        if ( ast_type == Type::intType )
+                return Node::irgen->GetIntType();
+        else if ( ast_type == Type::boolType )
+                return Node::irgen->GetBoolType();
+        else if ( ast_type == Type::voidType )
+                return llvm::Type::getVoidTy(*Node::irgen->GetContext());
+        else if ( ast_type == Type::floatType )
+                return Node::irgen->GetFloatType();
+        else if ( ast_type == Type::vec2Type)
+                return llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()),2);
+        else if ( ast_type == Type::vec3Type)
+                return llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()), 3);
+        else if ( ast_type == Type::vec4Type)
+                return llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()), 4);
+        else if ( dynamic_cast<ArrayType*>(ast_type) != NULL ){
+                ArrayType* astArrayType = dynamic_cast<ArrayType*>(ast_type);
+                llvm::Type* ty = GetllvmType(astArrayType->GetElemType());
+                return llvm::ArrayType::get(ty,astArrayType->GetElemCount());
+        }
+        else{
+                return NULL;
+        }
+}
+
+
 Decl::Decl(Identifier *n) : Node(*n->GetLocation()) {
     Assert(n != NULL);
     (id=n)->SetParent(this); 
@@ -38,6 +64,21 @@ void VarDecl::PrintChildren(int indentLevel) {
    if (type) type->Print(indentLevel+1);
    if (id) id->Print(indentLevel+1);
    if (assignTo) assignTo->Print(indentLevel+1, "(initializer) ");
+}
+
+/* VarDecl emit() */
+void VarDecl::Emit(){
+	llvm::Value* inst = NULL;
+	if ( symbolTable->isGlobalScope() ){
+		llvm::Constant* constant = NULL;	
+		inst = new llvm::GlobalVariable(*irgen->GetOrCreateModule("Program_Module.bc"), GetllvmType(this->GetType()),false,llvm::GlobalValue::ExternalLinkage, constant, this->GetIdentifier()->GetName());
+	}
+	else {
+		inst = new llvm::AllocaInst(GetllvmType(this->GetType()),this->GetIdentifier()->GetName(),irgen->GetBasicBlock());
+	}
+
+	Symbol varsym(this->GetIdentifier()->GetName(),this,E_VarDecl,inst);
+	symbolTable->insert(varsym);
 }
 
 FnDecl::FnDecl(Identifier *n, Type *r, List<VarDecl*> *d) : Decl(n) {
