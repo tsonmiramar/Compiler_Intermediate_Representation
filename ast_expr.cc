@@ -103,6 +103,10 @@ void ArrayAccess::PrintChildren(int indentLevel) {
     base->Print(indentLevel+1);
     subscript->Print(indentLevel+1, "(subscript) ");
 }
+
+void ArrayAccess::Emit(){
+	//TODO: Not yet implemented
+}
      
 FieldAccess::FieldAccess(Expr *b, Identifier *f) 
   : LValue(b? Join(b->GetLocation(), f->GetLocation()) : *f->GetLocation()) {
@@ -116,6 +120,10 @@ FieldAccess::FieldAccess(Expr *b, Identifier *f)
 void FieldAccess::PrintChildren(int indentLevel) {
     if (base) base->Print(indentLevel+1);
     field->Print(indentLevel+1);
+}
+
+void FieldAccess::Emit(){
+	//TODO: not yet implemented
 }
 
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {

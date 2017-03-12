@@ -40,6 +40,7 @@ class Stmt : public Node
   public:
      Stmt() : Node() {}
      Stmt(yyltype loc) : Node(loc) {}
+     virtual void Emit() {};
 };
 
 class StmtBlock : public Stmt 

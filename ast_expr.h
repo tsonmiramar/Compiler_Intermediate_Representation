@@ -25,10 +25,13 @@ class Expr : public Stmt
   public:
     Expr(yyltype loc) : Stmt(loc) {}
     Expr() : Stmt() {}
+    Type* type;
 
     friend std::ostream& operator<< (std::ostream& stream, Expr * expr) {
         return stream << expr->GetPrintNameForNode();
     }
+
+    virtual void Emit() {}
 };
 
 class ExprError : public Expr
@@ -56,6 +59,7 @@ class IntConstant : public Expr
     IntConstant(yyltype loc, int val);
     const char *GetPrintNameForNode() { return "IntConstant"; }
     void PrintChildren(int indentLevel);
+    virtual void Emit() { this->type = Type::intType;}
 };
 
 class FloatConstant: public Expr 
@@ -67,6 +71,7 @@ class FloatConstant: public Expr
     FloatConstant(yyltype loc, double val);
     const char *GetPrintNameForNode() { return "FloatConstant"; }
     void PrintChildren(int indentLevel);
+    virtual void Emit() { this->type = Type::floatType; }
 };
 
 class BoolConstant : public Expr 
@@ -78,6 +83,7 @@ class BoolConstant : public Expr
     BoolConstant(yyltype loc, bool val);
     const char *GetPrintNameForNode() { return "BoolConstant"; }
     void PrintChildren(int indentLevel);
+    virtual void Emit() { this->type = Type::boolType; }
 };
 
 class VarExpr : public Expr
@@ -188,6 +194,7 @@ class ArrayAccess : public LValue
     ArrayAccess(yyltype loc, Expr *base, Expr *subscript);
     const char *GetPrintNameForNode() { return "ArrayAccess"; }
     void PrintChildren(int indentLevel);
+    virtual void Emit();
 };
 
 /* Note that field access is used both for qualified names
@@ -205,6 +212,7 @@ class FieldAccess : public LValue
     FieldAccess(Expr *base, Identifier *field); //ok to pass NULL base
     const char *GetPrintNameForNode() { return "FieldAccess"; }
     void PrintChildren(int indentLevel);
+    virtual void Emit();
 };
 
 /* Like field access, call is used both for qualified base.field()

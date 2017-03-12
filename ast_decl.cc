@@ -32,6 +32,27 @@ llvm::Type* GetllvmType(Type* ast_type){
         }
 }
 
+llvm::Constant* GetllvmConstant(Type* ast_type){
+	if ( ast_type == Type::intType )
+		return llvm::ConstantInt::get(Node::irgen->GetIntType(),0);
+	else if ( ast_type == Type::floatType )
+		return llvm::ConstantFP::get(Node::irgen->GetFloatType(),(double)0);
+	else if ( ast_type == Type::boolType )
+		return llvm::ConstantInt::get(Node::irgen->GetBoolType(), (int) false);
+	else if ( ast_type == Type::vec2Type )
+		return llvm::ConstantAggregateZero::get(llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()),2));
+	else if ( ast_type == Type::vec3Type )
+		return llvm::ConstantAggregateZero::get(llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()),3));
+	else if ( ast_type == Type::vec4Type )
+		return llvm::ConstantAggregateZero::get(llvm::VectorType::get(llvm::Type::getFloatTy(*Node::irgen->GetContext()),4));
+	else if ( dynamic_cast<ArrayType*>(ast_type) != NULL ){
+		ArrayType* astArrayType = dynamic_cast<ArrayType*>(ast_type);
+                return GetllvmConstant(astArrayType->GetElemType());
+		
+	} 
+		return NULL;
+}
+
 
 Decl::Decl(Identifier *n) : Node(*n->GetLocation()) {
     Assert(n != NULL);
@@ -71,6 +92,11 @@ void VarDecl::Emit(){
 	llvm::Value* inst = NULL;
 	if ( symbolTable->isGlobalScope() ){
 		llvm::Constant* constant = NULL;	
+
+		if ( assignTo != NULL ){
+			constant = GetllvmConstant(this->type);
+		}
+
 		inst = new llvm::GlobalVariable(*irgen->GetOrCreateModule("Program_Module.bc"), GetllvmType(this->GetType()),false,llvm::GlobalValue::ExternalLinkage, constant, this->GetIdentifier()->GetName());
 	}
 	else {

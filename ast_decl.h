@@ -27,6 +27,8 @@ void yyerror(const char *msg);
 
 llvm::Type* GetllvmType(Type* ast_type);
 
+llvm::Constant* GetllvmConstant(Type* ast_type);
+
 class Decl : public Node 
 {
   protected:
