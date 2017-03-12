@@ -19,6 +19,12 @@ Node::Node() {
     parent = NULL;
 }
 
+SymbolTable* Node::symbolTable = new SymbolTable();
+
+MyStack* Node::loop_switchStack = new MyStack();
+
+IRGenerator* Node::irgen = new IRGenerator();
+
 /* The Print method is used to print the parse tree nodes.
  * If this node has a location (most nodes do, but some do not), it
  * will first print the line number to help you match the parse tree 

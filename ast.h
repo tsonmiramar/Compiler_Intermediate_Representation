@@ -39,6 +39,7 @@
 
 #include <stdlib.h>   // for NULL
 #include "location.h"
+#include "irgen.h"
 #include <iostream>
 
 using namespace std;
@@ -56,7 +57,11 @@ class Node  {
     Node(yyltype loc);
     Node();
     virtual ~Node() {}
-    
+
+    static SymbolTable* symbolTable;
+    static MyStack* loop_switchStack;
+    static IRGenerator* irgen;
+
     yyltype *GetLocation()   { return location; }
     void SetParent(Node *p)  { parent = p; }
     Node *GetParent()        { return parent; }
