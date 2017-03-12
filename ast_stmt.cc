@@ -30,10 +30,24 @@ void Program::Emit() {
     // You can use this as a template and create Emit() function
     // for individual node to fill in the module structure and instructions.
     //
-    IRGenerator irgen;
-    llvm::Module *mod = irgen.GetOrCreateModule("Name_the_Module.bc");
+    llvm::Module *mod = irgen->GetOrCreateModule("Program_Module.bc");
 
-    // create a function signature
+    symbolTable->push();
+     for ( int i = 0; i < decls->NumElements(); ++i ) {
+        Decl *d = decls->Nth(i);
+
+        d->Emit();
+    }
+   
+    symbolTable->pop();
+
+    // write the BC into standard output
+    llvm::WriteBitcodeToFile(mod, llvm::outs());
+   
+    //uncomment the next line to generate the human readable/assembly file
+    //mod->dump();	
+    
+    /* create a function signature
     std::vector<llvm::Type *> argTypes;
     llvm::Type *intTy = irgen.GetIntType();
     argTypes.push_back(intTy);
@@ -59,6 +73,7 @@ void Program::Emit() {
 
     //uncomment the next line to generate the human readable/assembly file
     //mod->dump();
+    */
 }
 
 StmtBlock::StmtBlock(List<VarDecl*> *d, List<Stmt*> *s) {
