@@ -43,6 +43,14 @@ llvm::BasicBlock *IRGenerator::GetBasicBlock() const {
    return currentBB;
 }
 
+void IRGenerator::SetEntryBB(llvm::BasicBlock *entry_bb){
+    currentEntryBB = entry_bb;
+}
+
+llvm::BasicBlock *IRGenerator::GetEntryBB() const {
+    return currentEntryBB;
+}
+
 llvm::Type *IRGenerator::GetIntType() const {
    llvm::Type *ty = llvm::Type::getInt32Ty(*context);
    return ty;

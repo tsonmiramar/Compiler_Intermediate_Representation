@@ -16,7 +16,8 @@
 #include "ast.h"
 #include "list.h"
 #include "ast_expr.h"
-
+#include <string>
+#include <sstream>
 class Type;
 class TypeQualifier;
 class NamedType;
@@ -28,6 +29,14 @@ void yyerror(const char *msg);
 llvm::Type* GetllvmType(Type* ast_type);
 
 llvm::Constant* GetllvmConstant(Type* ast_type);
+
+template <typename T>
+std::string to_string(T value)
+{
+	std::ostringstream os ;
+	os << value ;
+	return os.str() ;
+}
 
 class Decl : public Node 
 {
@@ -86,6 +95,7 @@ class FnDecl : public Decl
 
     Type *GetType() const { return returnType; }
     List<VarDecl*> *GetFormals() {return formals;}
+    virtual void Emit();
 };
 
 class FormalsError : public FnDecl

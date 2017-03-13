@@ -87,6 +87,23 @@ void StmtBlock::PrintChildren(int indentLevel) {
     stmts->PrintAll(indentLevel+1);
 }
 
+/* StmtBlock Emit() */
+void StmtBlock::Emit(){
+	for ( int i = 0; i < stmts->NumElements() ; i++){
+		Stmt* stmt = stmts->Nth(i);
+                StmtBlock* stmtBlk = dynamic_cast<StmtBlock*>(stmt);
+		if ( stmtBlk != NULL ){
+                        symbolTable->push();
+                }
+
+                stmt->Emit();
+
+                if ( stmtBlk != NULL){
+                        symbolTable->pop();
+                }
+	}
+}
+
 DeclStmt::DeclStmt(Decl *d) {
     Assert(d != NULL);
     (decl=d)->SetParent(this);
@@ -94,6 +111,10 @@ DeclStmt::DeclStmt(Decl *d) {
 
 void DeclStmt::PrintChildren(int indentLevel) {
     decl->Print(indentLevel+1);
+}
+
+void DeclStmt::Emit(){
+	decl->Emit();
 }
 
 ConditionalStmt::ConditionalStmt(Expr *t, Stmt *b) { 

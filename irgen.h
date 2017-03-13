@@ -32,6 +32,9 @@ class IRGenerator {
     llvm::BasicBlock *GetBasicBlock() const;
     void        SetBasicBlock(llvm::BasicBlock *bb);
 
+    llvm::BasicBlock *GetEntryBB() const;
+    void 	SetEntryBB(llvm::BasicBlock *entry_bb);
+
     llvm::Type *GetIntType() const;
     llvm::Type *GetBoolType() const;
     llvm::Type *GetFloatType() const;
@@ -43,6 +46,8 @@ class IRGenerator {
     // track which function or basic block is active
     llvm::Function    *currentFunc;
     llvm::BasicBlock  *currentBB;
+
+    llvm::BasicBlock  *currentEntryBB;
 
     static const char *TargetTriple;
     static const char *TargetLayout;

@@ -100,7 +100,8 @@ void VarDecl::Emit(){
 		inst = new llvm::GlobalVariable(*irgen->GetOrCreateModule("Program_Module.bc"), GetllvmType(this->GetType()),false,llvm::GlobalValue::ExternalLinkage, constant, this->GetIdentifier()->GetName());
 	}
 	else {
-		inst = new llvm::AllocaInst(GetllvmType(this->GetType()),this->GetIdentifier()->GetName(),irgen->GetBasicBlock());
+	//Local Variable Declaration
+		inst = new llvm::AllocaInst(GetllvmType(this->GetType()),this->GetIdentifier()->GetName(),irgen->GetEntryBB());
 	}
 
 	Symbol varsym(this->GetIdentifier()->GetName(),this,E_VarDecl,inst);
@@ -134,3 +135,51 @@ void FnDecl::PrintChildren(int indentLevel) {
     if (body) body->Print(indentLevel+1, "(body) ");
 }
 
+/* FnDecl Emit() */
+void FnDecl::Emit(){
+	std::vector<llvm::Type*> args_type;
+
+	for ( int i = 0; i < formals->NumElements(); i++ ){
+		args_type.push_back(GetllvmType(formals->Nth(i)->GetType()));
+	}
+
+	llvm::ArrayRef<llvm::Type*> argArray(args_type);
+	llvm::FunctionType* func_type = llvm::FunctionType::get(GetllvmType(this->GetType()), argArray, false);
+
+	llvm::Function* func = llvm::cast<llvm::Function>(irgen->GetOrCreateModule("Program_Module.bc")->getOrInsertFunction(this->GetIdentifier()->GetName(), func_type));
+
+	Symbol varsym(this->GetIdentifier()->GetName(),this,E_FunctionDecl,func);
+	symbolTable->insert(varsym);
+
+	// Function parameters
+	symbolTable->push();
+	
+	llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*irgen->GetContext(), "entry", func);
+
+	llvm::BasicBlock* nextBB = llvm::BasicBlock::Create(*irgen->GetContext(), "next", func);
+
+	irgen->SetEntryBB(entryBB);
+	irgen->SetBasicBlock(nextBB);
+	irgen->SetFunction(func);
+	
+	int i = 0;
+	for ( llvm::Function::arg_iterator args = func->arg_begin(); args != func->arg_end(); args++){
+		args->setName(formals->Nth(i)->GetIdentifier()->GetName());
+		llvm::Value* mem = new llvm::AllocaInst(GetllvmType(formals->Nth(i)->GetType()), "arg"+ to_string(i), entryBB);
+		
+		Symbol varsym(formals->Nth(i)->GetIdentifier()->GetName(),formals->Nth(i), E_VarDecl, mem);
+
+		symbolTable->insert(varsym);
+
+		new llvm::StoreInst(args,mem,nextBB);
+		i++;
+	}
+
+	if ( body != NULL ){
+		body->Emit();	
+	}
+
+	llvm::BranchInst::Create(nextBB,entryBB);
+	new llvm::UnreachableInst(*irgen->GetContext(), irgen->GetBasicBlock());
+	symbolTable->pop();
+}
