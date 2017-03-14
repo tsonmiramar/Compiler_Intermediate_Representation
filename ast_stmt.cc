@@ -43,7 +43,7 @@ void Program::Emit() {
 
     // write the BC into standard output
     llvm::WriteBitcodeToFile(mod, llvm::outs());
-   
+    
     //uncomment the next line to generate the human readable/assembly file
     //mod->dump();	
     

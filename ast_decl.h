@@ -28,7 +28,7 @@ void yyerror(const char *msg);
 
 llvm::Type* GetllvmType(Type* ast_type);
 
-llvm::Constant* GetllvmConstant(Type* ast_type);
+llvm::Constant* GetZerollvmConstant(Type* ast_type);
 
 template <typename T>
 std::string to_string(T value)

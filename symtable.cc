@@ -54,6 +54,16 @@ Symbol* SymbolTable::find(const char *name){
 	return tables.back()->find(name);
 }
 
+Symbol* SymbolTable::findAllScope(const char* name){
+	for ( vector<ScopedTable*>::reverse_iterator iter = tables.rbegin(); iter != tables.rend(); ++iter){
+		Symbol* foundSym = (*iter)->find(name);
+		if ( foundSym != NULL )
+			return foundSym;
+	}
+
+	return NULL;
+}
+
 
 /* My Stack */
 bool MyStack::insideLoop(){

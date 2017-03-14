@@ -79,6 +79,7 @@ class SymbolTable {
     void insert(Symbol &sym);
     void remove(Symbol &sym);
     Symbol *find(const char *name);
+    Symbol *findAllScope(const char*name);
 
     bool isGlobalScope() const { return (tables.size() == 1); }
 };    
