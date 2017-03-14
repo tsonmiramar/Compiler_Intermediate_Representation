@@ -314,6 +314,78 @@ void LogicalExpr::Emit(){
 	}
 }
 
+void RelationalExpr::Emit(){
+	left->Emit();
+	right->Emit();
+	
+	this->type = Type::boolType;
+
+	if ( op->IsOp(">") ){
+                if ( left->type == Type::intType || left->type == Type::boolType) {
+                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SGT;
+                        if ( right->type == Type::floatType )
+                                pred = llvm::FCmpInst::FCMP_OGT;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+                else if ( left->type == Type::floatType ){
+                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OGT;
+                        if ( right->type != left->type )
+                                pred = llvm::ICmpInst::ICMP_SGT;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+        }
+	else if ( op->IsOp("<") ){
+                if ( left->type == Type::intType || left->type == Type::boolType) {
+                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SLT;
+                        if ( right->type == Type::floatType )
+                                pred = llvm::FCmpInst::FCMP_OLT;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+                else if ( left->type == Type::floatType ){
+                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OLT;
+                        if ( right->type != left->type )
+                                pred = llvm::ICmpInst::ICMP_SLT;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+        }
+	else if ( op->IsOp(">=") ){
+                if ( left->type == Type::intType || left->type == Type::boolType) {
+                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SGE;
+                        if ( right->type == Type::floatType )
+                                pred = llvm::FCmpInst::FCMP_OGE;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+                else if ( left->type == Type::floatType ){
+                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OGE;
+                        if ( right->type != left->type )
+                                pred = llvm::ICmpInst::ICMP_SGE;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+        }
+	else if ( op->IsOp("<=") ){
+                if ( left->type == Type::intType || left->type == Type::boolType) {
+                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SLE;
+                        if ( right->type == Type::floatType )
+                                pred = llvm::FCmpInst::FCMP_OLE;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+                else if ( left->type == Type::floatType ){
+                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OLE;
+                        if ( right->type != left->type )
+                                pred = llvm::ICmpInst::ICMP_SLE;
+
+                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+                }
+        }
+}
+
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {
     Assert(f != NULL && a != NULL); // b can be be NULL (just means no explicit base)
     base = b;
