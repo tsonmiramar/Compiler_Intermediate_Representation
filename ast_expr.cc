@@ -355,8 +355,12 @@ void AssignExpr::Emit(){
 void ArithmeticExpr::Emit(){
 	
 	left->Emit();
+	if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+		left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
 	
 	right->Emit();
+	if ( dynamic_cast<ArrayAccess*>(right) != NULL )
+		right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
 
 	this->type = left->type;
 
@@ -399,7 +403,12 @@ void ArithmeticExpr::Emit(){
 /* Equality Expr Emit() */
 void EqualityExpr::Emit() {
 	left->Emit();
-	right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+                left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
+
+        right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(right) != NULL )
+                right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
 
 	this->type = Type::boolType;
 
@@ -439,7 +448,13 @@ void EqualityExpr::Emit() {
 
 void LogicalExpr::Emit(){
 	left->Emit();
-	right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+                left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
+
+        right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(right) != NULL )
+                right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+
 	this->type = Type::boolType;
 
 	if ( op->IsOp("&&") ){
@@ -452,8 +467,13 @@ void LogicalExpr::Emit(){
 
 void RelationalExpr::Emit(){
 	left->Emit();
-	right->Emit();
-	
+        if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+                left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
+
+        right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(right) != NULL )
+                right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+
 	this->type = Type::boolType;
 
 	if ( op->IsOp(">") ){
