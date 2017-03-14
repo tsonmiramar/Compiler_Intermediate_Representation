@@ -302,7 +302,16 @@ void EqualityExpr::Emit() {
 }
 
 void LogicalExpr::Emit(){
-	
+	left->Emit();
+	right->Emit();
+	this->type = Type::boolType;
+
+	if ( op->IsOp("&&") ){
+		this->llvm_val = llvm::BinaryOperator::CreateAnd(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+	}
+	else if ( op->IsOp("||") ){
+		this->llvm_val = llvm::BinaryOperator::CreateOr(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+	}
 }
 
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {
