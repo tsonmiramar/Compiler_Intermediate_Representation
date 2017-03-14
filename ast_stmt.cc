@@ -45,7 +45,7 @@ void Program::Emit() {
     llvm::WriteBitcodeToFile(mod, llvm::outs());
     
     //uncomment the next line to generate the human readable/assembly file
-    //mod->dump();	
+    mod->dump();	
     
     /* create a function signature
     std::vector<llvm::Type *> argTypes;
