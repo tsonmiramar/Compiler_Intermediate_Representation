@@ -386,6 +386,38 @@ void RelationalExpr::Emit(){
         }
 }
 
+void PostfixExpr::Emit(){
+	VarExpr* lhs = dynamic_cast<VarExpr*>(left);
+	if ( lhs == NULL )
+		return;
+	lhs->Emit();
+	this->type = lhs->type;
+	this->llvm_val = lhs->llvm_val;
+
+	Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
+	
+	if ( op->IsOp("++") ){
+		llvm::Value* add_inst;
+		if ( left->type == Type::intType )
+			add_inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());	
+		else if ( left->type == Type::boolType)
+			add_inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
+		else if ( left->type == Type::floatType )
+			add_inst = llvm::BinaryOperator::CreateFAdd(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
+
+		new llvm::StoreInst(add_inst, varsym->value, true, irgen->GetBasicBlock());
+	}
+	else if ( op->IsOp("--") ){
+                llvm::Value* sub_inst;
+                if ( left->type == Type::intType )
+                        sub_inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
+                else if ( left->type == Type::boolType)
+                        sub_inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());                else if ( left->type == Type::floatType )
+                        sub_inst = llvm::BinaryOperator::CreateFSub(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
+                new llvm::StoreInst(sub_inst, varsym->value, true, irgen->GetBasicBlock());
+        }
+}
+
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {
     Assert(f != NULL && a != NULL); // b can be be NULL (just means no explicit base)
     base = b;
@@ -399,4 +431,3 @@ void Call::PrintChildren(int indentLevel) {
    if (field) field->Print(indentLevel+1);
    if (actuals) actuals->PrintAll(indentLevel+1, "(actuals) ");
 }
-
