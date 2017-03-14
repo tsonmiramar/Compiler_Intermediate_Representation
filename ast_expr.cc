@@ -59,8 +59,13 @@ void VarExpr::Emit(){
 	Symbol* varsym = symbolTable->findAllScope(this->id->GetName());
 	VarDecl* varDecl = dynamic_cast<VarDecl*>(varsym->decl);
 	llvm::Value* var_val = varsym->value;
+	ArrayType* arr_type = dynamic_cast<ArrayType*>(varDecl->GetType());	
 
-	this->type = varDecl->GetType();
+	if ( arr_type != NULL )
+		this->type = arr_type->GetElemType();
+	else
+		this->type = varDecl->GetType();
+
 	this->llvm_val = new llvm::LoadInst(var_val,"",irgen->GetBasicBlock());
 }
 
@@ -119,6 +124,7 @@ void ConditionalExpr::PrintChildren(int indentLevel) {
     trueExpr->Print(indentLevel+1, "(true) ");
     falseExpr->Print(indentLevel+1, "(false) ");
 }
+
 ArrayAccess::ArrayAccess(yyltype loc, Expr *b, Expr *s) : LValue(loc) {
     (base=b)->SetParent(this); 
     (subscript=s)->SetParent(this);
@@ -544,34 +550,46 @@ void RelationalExpr::Emit(){
 
 void PostfixExpr::Emit(){
 	VarExpr* lhs = dynamic_cast<VarExpr*>(left);
-	if ( lhs == NULL )
-		return;
-	lhs->Emit();
-	this->type = lhs->type;
-	this->llvm_val = lhs->llvm_val;
-
-	Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
+	ArrayAccess* lhs_arr = dynamic_cast<ArrayAccess*>(left);
+	llvm::Value* inst;
 	
 	if ( op->IsOp("++") ){
-		llvm::Value* add_inst;
-		if ( left->type == Type::intType )
-			add_inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());	
-		else if ( left->type == Type::boolType)
-			add_inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
-		else if ( left->type == Type::floatType )
-			add_inst = llvm::BinaryOperator::CreateFAdd(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
+		if ( lhs != NULL ){
+			lhs->Emit();
+			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
 
-		new llvm::StoreInst(add_inst, varsym->value, true, irgen->GetBasicBlock());
+			if ( left->type == Type::intType )
+ 	                       inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
+	                else if ( left->type == Type::boolType)
+        	               inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
+             	   	else if ( left->type == Type::floatType )
+                	       inst = llvm::BinaryOperator::CreateFAdd(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
+			
+			new llvm::StoreInst(inst,varsym->value,true,irgen->GetBasicBlock());
+		}
+		else if ( lhs_arr != NULL ){
+			lhs_arr->Emit();
+			llvm::LoadInst* load_inst = new llvm::LoadInst(lhs_arr->llvm_val,"",irgen->GetBasicBlock());
+
+			if ( left->type == Type::intType )
+                               inst = llvm::BinaryOperator::CreateAdd(load_inst, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
+                        else if ( left->type == Type::boolType)
+                               inst = llvm::BinaryOperator::CreateAdd(load_inst, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
+                        else if ( left->type == Type::floatType )
+                               inst = llvm::BinaryOperator::CreateFAdd(load_inst, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
+
+			new llvm::StoreInst(inst,lhs_arr->llvm_val,true,irgen->GetBasicBlock());
+		}
 	}
+
 	else if ( op->IsOp("--") ){
-                llvm::Value* sub_inst;
                 if ( left->type == Type::intType )
-                        sub_inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
+                        inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
                 else if ( left->type == Type::boolType)
-                        sub_inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());                else if ( left->type == Type::floatType )
-                        sub_inst = llvm::BinaryOperator::CreateFSub(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
-                new llvm::StoreInst(sub_inst, varsym->value, true, irgen->GetBasicBlock());
+                        inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());                else if ( left->type == Type::floatType )
+                        inst = llvm::BinaryOperator::CreateFSub(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
         }
+
 }
 
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {
