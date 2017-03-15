@@ -156,6 +156,54 @@ void IfStmt::PrintChildren(int indentLevel) {
     if (elseBody) elseBody->Print(indentLevel+1, "(else) ");
 }
 
+void IfStmt::Emit(){
+	
+	llvm::BasicBlock *eb;
+	test->Emit();
+	
+	llvm::BasicBlock* fb = llvm::BasicBlock::Create(*irgen->GetContext(), "footerBB", irgen->GetFunction());
+	
+        if (elseBody != NULL)
+                eb = llvm::BasicBlock::Create(*irgen->GetContext(), "ElseBB", irgen->GetFunction());
+
+	llvm::BasicBlock* tb = llvm::BasicBlock::Create(*irgen->GetContext(), "ThenBB", irgen->GetFunction());
+	
+	if ( elseBody !=NULL ){
+		llvm::BranchInst::Create(tb,eb,test->llvm_val,irgen->GetBasicBlock());
+	}
+	else{
+		llvm::BranchInst::Create(tb,fb,test->llvm_val,irgen->GetBasicBlock());
+	}
+	
+	tb->moveAfter(irgen->GetBasicBlock());
+	if ( elseBody != NULL ){
+		eb->moveAfter(tb);
+		fb->moveAfter(eb);
+	}
+	else{
+		fb->moveAfter(tb);
+	}
+
+	irgen->SetBasicBlock(tb);
+	body->Emit();
+
+	if ( !irgen->GetBasicBlock()->getTerminator()){	
+		llvm::BranchInst::Create(fb,irgen->GetBasicBlock());
+
+	}
+
+	if ( elseBody != NULL ){
+		irgen->SetBasicBlock(eb);
+		elseBody->Emit();
+
+		if ( !irgen->GetBasicBlock()->getTerminator()){
+                	llvm::BranchInst::Create(fb,irgen->GetBasicBlock());
+		}	
+        }
+
+	irgen->SetBasicBlock(fb);
+}
+
 
 ReturnStmt::ReturnStmt(yyltype loc, Expr *e) : Stmt(loc) { 
     expr = e;

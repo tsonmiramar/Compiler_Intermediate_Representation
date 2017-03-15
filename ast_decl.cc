@@ -165,7 +165,7 @@ void FnDecl::Emit(){
 	int i = 0;
 	for ( llvm::Function::arg_iterator args = func->arg_begin(); args != func->arg_end(); args++){
 		args->setName(formals->Nth(i)->GetIdentifier()->GetName());
-		llvm::Value* mem = new llvm::AllocaInst(GetllvmType(formals->Nth(i)->GetType()), "arg"+ to_string(i), entryBB);
+		llvm::Value* mem = new llvm::AllocaInst(GetllvmType(formals->Nth(i)->GetType()), "arg" + to_string(i), entryBB);
 		
 		Symbol varsym(formals->Nth(i)->GetIdentifier()->GetName(),formals->Nth(i), E_VarDecl, mem);
 
