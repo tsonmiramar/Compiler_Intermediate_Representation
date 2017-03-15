@@ -356,7 +356,7 @@ void AssignExpr::ops_perform(const char* opsTok){
 		field_expr->Emit();
 	
 		Symbol* varsym = symbolTable->findAllScope(dynamic_cast<VarExpr*>(field_expr->GetBase())->GetIdentifier()->GetName());
-		llvm::Value* insert_inst = field_expr->InsertllvmElems(right->llvm_val);
+		llvm::Value* insert_inst = field_expr->InsertllvmElems(this->llvm_val);
                 new llvm::StoreInst(insert_inst,varsym->value,true,irgen->GetBasicBlock());
 	}
 }
@@ -638,4 +638,18 @@ void Call::PrintChildren(int indentLevel) {
    if (base) base->Print(indentLevel+1);
    if (field) field->Print(indentLevel+1);
    if (actuals) actuals->PrintAll(indentLevel+1, "(actuals) ");
+}
+
+void Call::Emit(){
+	Symbol* fnsym = symbolTable->findAllScope(field->GetName());		
+	vector<llvm::Value*> args;
+	for ( int i = 0; i < actuals->NumElements(); i++ ){
+		Expr* expr = actuals->Nth(i);
+		expr->Emit();
+		args.push_back(expr->llvm_val);
+	}
+
+	llvm::ArrayRef<llvm::Value*> argsRef = llvm::ArrayRef<llvm::Value*>(args); 
+	
+	this->llvm_val = llvm::CallInst::Create(fnsym->value,argsRef,"",irgen->GetBasicBlock());
 }
