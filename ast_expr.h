@@ -135,6 +135,7 @@ class ArithmeticExpr : public CompoundExpr
     ArithmeticExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     ArithmeticExpr(Operator *op, Expr *rhs) : CompoundExpr(op,rhs) {}
     const char *GetPrintNameForNode() { return "ArithmeticExpr"; }
+    virtual void ops_perform(const char* opsTok);
     virtual void Emit();
 };
 
@@ -231,6 +232,8 @@ class FieldAccess : public LValue
     llvm::Value* GetllvmField();
     llvm::Value* InsertllvmElems(llvm::Value* insertVal);
     Expr* GetBase() { return base; }
+    static llvm::Value* InsertWithUndef(Type* newType, llvm::Value* insertVal);
+    Identifier* GetField() { return field; };
     void GetType();
     virtual void Emit();
 };

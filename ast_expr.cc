@@ -182,6 +182,22 @@ FieldAccess::FieldAccess(Expr *b, Identifier *f)
     (field=f)->SetParent(this);
 }
 
+llvm::Value* FieldAccess::InsertWithUndef(Type* newType, llvm::Value* insertVal){
+	int swizzle_len;
+	if ( newType == Type::vec2Type )
+		swizzle_len =2;
+	else if ( newType == Type::vec3Type)
+		swizzle_len =3;
+	else
+		swizzle_len =4;
+
+	llvm::Value* dest_vec = llvm::UndefValue::get(Decl::GetllvmType(newType));
+	for ( unsigned int i = 0; i < swizzle_len; i++ ){
+		dest_vec = llvm::InsertElementInst::Create(dest_vec,insertVal,llvm::ConstantInt::get(irgen->GetIntType(),i),"",irgen->GetBasicBlock());	
+	}
+	return dest_vec;	
+}
+
 
 void FieldAccess::PrintChildren(int indentLevel) {
     if (base) base->Print(indentLevel+1);
@@ -220,7 +236,14 @@ llvm::Value* FieldAccess::GetllvmField(){
 
                 llvm::ArrayRef<llvm::Constant*> swizzleArrayRef(swizzle_vec);
                 llvm::Constant *mask = llvm::ConstantVector::get(swizzleArrayRef);
-		this->type = base->type;
+		
+		if ( swizzle.length() == 2 )
+			this->type = Type::vec2Type;
+		else if ( swizzle.length() == 3) 
+			this->type = Type::vec3Type;
+		else
+			this->type = Type::vec4Type;
+
                 return new llvm::ShuffleVectorInst( base->llvm_val, base->llvm_val, mask, "", irgen->GetBasicBlock());
 	}	
 }
@@ -241,7 +264,6 @@ llvm::Value* FieldAccess::InsertllvmElems(llvm::Value* insertVal){
 		return llvm::InsertElementInst::Create(this->llvm_val, insertVal, swizzleIdx,"", irgen->GetBasicBlock());
 	}
 	else {
-		llvm::ShuffleVectorInst* insert_vector = dynamic_cast<llvm::ShuffleVectorInst*>(insertVal);	
 		llvm::Constant* swizzleIdx;
 		llvm::Value* insert_inst = this->llvm_val;
 
@@ -255,7 +277,7 @@ llvm::Value* FieldAccess::InsertllvmElems(llvm::Value* insertVal){
                 	else
                      		swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 3);
 
-			llvm::Value* extract_inst = llvm::ExtractElementInst::Create(insert_vector,swizzleIdx,"",irgen->GetBasicBlock());
+			llvm::Value* extract_inst = llvm::ExtractElementInst::Create(insertVal,swizzleIdx,"",irgen->GetBasicBlock());
 			insert_inst = llvm::InsertElementInst::Create(insert_inst, extract_inst,swizzleIdx,"", irgen->GetBasicBlock());
 		}
 		return insert_inst;
@@ -276,40 +298,8 @@ void FieldAccess::Emit(){
 
 /* AssignExpr Emit() */
 void AssignExpr::Emit(){
-	VarExpr* lhs = dynamic_cast<VarExpr*>(left);
-	ArrayAccess* lhs_arr = dynamic_cast<ArrayAccess*>(left);
-	FieldAccess* lhs_field = dynamic_cast<FieldAccess*>(left);
- 	
 	if ( op->IsOp("=") ){
-		right->Emit();
-		if ( dynamic_cast<ArrayAccess*>(right) != NULL)
-                	right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
-		else if ( dynamic_cast<FieldAccess*>(right) != NULL){
-			FieldAccess* right_field = dynamic_cast<FieldAccess*>(right);
-			right->llvm_val = right_field->GetllvmField();
-			right->type = right_field->type;
-		}
-			
-
-		if ( lhs != NULL ){
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-			new llvm::StoreInst(right->llvm_val, varsym->value, irgen->GetBasicBlock());
-		}
-		else if ( lhs_arr != NULL ){
-			lhs_arr->Emit();
-			new llvm::StoreInst(right->llvm_val,lhs_arr->llvm_val, irgen->GetBasicBlock());
-			
-		}
-		else if ( lhs_field != NULL){
-			lhs_field->Emit();
-			VarExpr* var_expr = dynamic_cast<VarExpr*>(lhs_field->GetBase());
-			Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
-			llvm::Value* insert_inst = lhs_field->InsertllvmElems(right->llvm_val);
-			new llvm::StoreInst(insert_inst,varsym->value,true,irgen->GetBasicBlock());
-		}
-
-		this->llvm_val = right->llvm_val;
-		this->type = right->type;
+		this->ops_perform("=");
 	}
 	else if ( op->IsOp("+=") ){
 		this->ops_perform("+");
@@ -328,12 +318,31 @@ void AssignExpr::Emit(){
 void AssignExpr::ops_perform(const char* opsTok){
         yyltype loc;
         ArithmeticExpr* arith = new ArithmeticExpr(left,new Operator(loc,opsTok), right);
-        arith->Emit();
-        this->llvm_val = arith->llvm_val;
-        this->type = arith->type;
-
         VarExpr* var_expr = dynamic_cast<VarExpr*>(left);
         ArrayAccess* arr_expr = dynamic_cast<ArrayAccess*>(left);
+	FieldAccess* field_expr = dynamic_cast<FieldAccess*>(left);
+
+	ArrayAccess* arr_rhs_expr = dynamic_cast<ArrayAccess*>(right);
+	FieldAccess* field_rhs_expr = dynamic_cast<FieldAccess*>(right);
+
+	if ( strcmp(opsTok,"=" ) == 0 ){
+		right->Emit();
+		if ( arr_rhs_expr != NULL ){
+			right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+		}
+		else if ( field_rhs_expr != NULL ){
+			right->llvm_val = field_rhs_expr->GetllvmField();
+			right->type = field_rhs_expr->type;	
+		}
+
+		this->llvm_val = right->llvm_val;
+		this->type = right->type;
+	}
+	else {
+		arith->Emit();
+        	this->llvm_val = arith->llvm_val;
+        	this->type = arith->type;
+	}
 
         if ( var_expr != NULL ){
                 Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
@@ -343,18 +352,42 @@ void AssignExpr::ops_perform(const char* opsTok){
                 arr_expr->Emit();
                 new llvm::StoreInst(this->llvm_val, arr_expr->llvm_val, irgen->GetBasicBlock());
         }
+	else if ( field_expr != NULL){
+		field_expr->Emit();
+	
+		Symbol* varsym = symbolTable->findAllScope(dynamic_cast<VarExpr*>(field_expr->GetBase())->GetIdentifier()->GetName());
+		llvm::Value* insert_inst = field_expr->InsertllvmElems(right->llvm_val);
+                new llvm::StoreInst(insert_inst,varsym->value,true,irgen->GetBasicBlock());
+	}
 }
+
+void ArithmeticExpr::ops_perform(const char* opsTok){}
+
 
 /* ArithmeticExpr Emit() */
 void ArithmeticExpr::Emit(){
 	
+	ArrayAccess* lhs_arr = dynamic_cast<ArrayAccess*>(left);
+	FieldAccess* lhs_field = dynamic_cast<FieldAccess*>(left);
+
+	ArrayAccess* rhs_arr = dynamic_cast<ArrayAccess*>(right);
+        FieldAccess* rhs_field = dynamic_cast<FieldAccess*>(right);
+
 	left->Emit();
-	if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+	if ( lhs_arr != NULL )
 		left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
-	
+	else if ( lhs_field != NULL ){
+		left->llvm_val = lhs_field->GetllvmField();
+		left->type = lhs_field->type;
+	}
+		
 	right->Emit();
-	if ( dynamic_cast<ArrayAccess*>(right) != NULL )
-		right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+        if ( rhs_arr != NULL )
+                right->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
+        else if ( rhs_field != NULL ){
+                right->llvm_val = rhs_field->GetllvmField();
+                right->type = rhs_field->type;
+        }
 
 	this->type = left->type;
 
@@ -362,7 +395,17 @@ void ArithmeticExpr::Emit(){
 		if ( left->type == Type::intType || left->type == Type::boolType){
 			this->llvm_val = llvm::BinaryOperator::CreateAdd(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}	
-		else if ( left->type == Type::floatType ){
+		else {	
+			if ( left->type == Type::floatType && right->type != Type::floatType && right->type != Type::intType && right->type != Type::boolType ) {
+				left->llvm_val = FieldAccess::InsertWithUndef(right->type,left->llvm_val);
+				this->type = left->type = right->type;
+						
+			}
+			else if ( left->type != Type::intType && left->type != Type::boolType && left->type != Type::floatType && right->type == Type::floatType){
+ 				right->llvm_val = FieldAccess::InsertWithUndef(left->type,right->llvm_val);
+				this->type = right->type = left->type;
+			}
+			
 			this->llvm_val = llvm::BinaryOperator::CreateFAdd(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
 	}
@@ -371,15 +414,34 @@ void ArithmeticExpr::Emit(){
 		if ( left->type == Type::intType || left->type == Type::boolType){
 			this->llvm_val = llvm::BinaryOperator::CreateSub(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
-		else if ( left->type == Type::floatType ){
-			this->llvm_val = llvm::BinaryOperator::CreateFSub(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
+		else {
+			if ( left->type == Type::floatType && right->type != Type::floatType && right->type != Type::intType && right->type != Type::boolType ) {
+                                left->llvm_val = FieldAccess::InsertWithUndef(right->type,left->llvm_val);
+                                this->type = left->type = right->type;
+
+                        }
+                        else if ( left->type != Type::intType && left->type != Type::boolType && left->type != Type::floatType && right->type == Type::floatType){
+                                right->llvm_val = FieldAccess::InsertWithUndef(left->type,right->llvm_val);
+                                this->type = right->type = left->type;
+                        }
+                        this->llvm_val = llvm::BinaryOperator::CreateFSub(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
 	}
 	else if (op->IsOp("*")){
 		if ( left->type == Type::intType || left->type == Type::boolType){
 			this->llvm_val = llvm::BinaryOperator::CreateMul(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
-		else if ( left->type == Type::floatType ){
+		else {
+			if ( left->type == Type::floatType && right->type != Type::floatType && right->type != Type::intType && right->type != Type::boolType ) {
+                                left->llvm_val = FieldAccess::InsertWithUndef(right->type,left->llvm_val);
+                                this->type = left->type = right->type;
+
+                        }
+                        else if ( left->type != Type::intType && left->type != Type::boolType && left->type != Type::floatType && right->type == Type::floatType){
+                                right->llvm_val = FieldAccess::InsertWithUndef(left->type,right->llvm_val);
+                                this->type = right->type = left->type;
+                        }
+
 			this->llvm_val = llvm::BinaryOperator::CreateFMul(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
 	}
@@ -387,7 +449,17 @@ void ArithmeticExpr::Emit(){
 		if ( left->type == Type::intType || left->type == Type::boolType){
 			this->llvm_val = llvm::BinaryOperator::CreateSDiv(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
-		else if ( left->type == Type::floatType ){
+		else {
+			if ( left->type == Type::floatType && right->type != Type::floatType && right->type != Type::intType && right->type != Type::boolType ) {
+                                left->llvm_val = FieldAccess::InsertWithUndef(right->type,left->llvm_val);
+                                this->type = left->type = right->type;
+
+                        }
+                        else if ( left->type != Type::intType && left->type != Type::boolType && left->type != Type::floatType && right->type == Type::floatType){
+                                right->llvm_val = FieldAccess::InsertWithUndef(left->type,right->llvm_val);
+                                this->type = right->type = left->type;
+                        }
+	
 			this->llvm_val = llvm::BinaryOperator::CreateFDiv(left->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
 		}
 	}

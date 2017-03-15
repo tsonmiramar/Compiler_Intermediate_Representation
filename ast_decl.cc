@@ -7,7 +7,7 @@
 #include "ast_stmt.h"
 #include "symtable.h"        
          
-llvm::Type* GetllvmType(Type* ast_type){
+llvm::Type* Decl::GetllvmType(Type* ast_type){
         if ( ast_type == Type::intType )
                 return Node::irgen->GetIntType();
         else if ( ast_type == Type::boolType )
@@ -32,7 +32,7 @@ llvm::Type* GetllvmType(Type* ast_type){
         }
 }
 
-llvm::Constant* GetZerollvmConstant(Type* ast_type){
+llvm::Constant* Decl::GetZerollvmConstant(Type* ast_type){
 	if ( ast_type == Type::intType )
 		return llvm::ConstantInt::get(Node::irgen->GetIntType(),0);
 	else if ( ast_type == Type::floatType )

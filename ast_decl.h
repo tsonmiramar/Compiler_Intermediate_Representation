@@ -26,10 +26,6 @@ class Stmt;
 
 void yyerror(const char *msg);
 
-llvm::Type* GetllvmType(Type* ast_type);
-
-llvm::Constant* GetZerollvmConstant(Type* ast_type);
-
 template <typename T>
 std::string to_string(T value)
 {
@@ -48,6 +44,8 @@ class Decl : public Node
     Decl(Identifier *name);
     Identifier *GetIdentifier() const { return id; }
     friend ostream& operator<<(ostream& out, Decl *d) { return out << d->id; }
+    static llvm::Type* GetllvmType(Type* ast_type);
+    static llvm::Constant* GetZerollvmConstant(Type* ast_type);
 
 };
 
