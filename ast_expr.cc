@@ -55,18 +55,27 @@ void VarExpr::PrintChildren(int indentLevel) {
     id->Print(indentLevel+1);
 }
 
+void VarExpr::GetType(){
+	Symbol* varsym = symbolTable->findAllScope(this->id->GetName());
+	VarDecl* varDecl = dynamic_cast<VarDecl*>(varsym->decl);
+	ArrayType* arr_type = dynamic_cast<ArrayType*>(varDecl->GetType());
+	if ( arr_type != NULL )
+        	this->type = arr_type->GetElemType();
+        else
+        	this->type = varDecl->GetType();
+}
+
 void VarExpr::Emit(){
 	Symbol* varsym = symbolTable->findAllScope(this->id->GetName());
 	VarDecl* varDecl = dynamic_cast<VarDecl*>(varsym->decl);
-	llvm::Value* var_val = varsym->value;
 	ArrayType* arr_type = dynamic_cast<ArrayType*>(varDecl->GetType());	
-
+	
 	if ( arr_type != NULL )
 		this->type = arr_type->GetElemType();
 	else
 		this->type = varDecl->GetType();
 
-	this->llvm_val = new llvm::LoadInst(var_val,"",irgen->GetBasicBlock());
+	this->llvm_val = new llvm::LoadInst(varsym->value,"",irgen->GetBasicBlock());
 }
 
 Operator::Operator(yyltype loc, const char *tok) : Node(loc) {
@@ -135,6 +144,15 @@ void ArrayAccess::PrintChildren(int indentLevel) {
     subscript->Print(indentLevel+1, "(subscript) ");
 }
 
+void ArrayAccess::GetType(){
+	VarExpr* var_expr = dynamic_cast<VarExpr*>(base);
+        Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());        
+	VarDecl* varDecl = dynamic_cast<VarDecl*>(varsym->decl);
+
+        ArrayType* arr_type = dynamic_cast<ArrayType*>(varDecl->GetType());
+        this->type = arr_type->GetElemType();
+}
+
 void ArrayAccess::Emit(){
 	subscript->Emit();
 	
@@ -153,7 +171,7 @@ void ArrayAccess::Emit(){
 	llvm::ArrayRef<llvm::Value*> indRef = llvm::ArrayRef<llvm::Value*>(indices);
 
 	this->llvm_val = llvm::GetElementPtrInst::Create(varsym->value, indRef, "", irgen->GetBasicBlock());
-	
+	this->getElemPtrInst = this->llvm_val;
 }
      
 FieldAccess::FieldAccess(Expr *b, Identifier *f) 
@@ -170,8 +188,90 @@ void FieldAccess::PrintChildren(int indentLevel) {
     field->Print(indentLevel+1);
 }
 
+llvm::Value* FieldAccess::GetllvmField(){
+	string swizzle = string(field->GetName());
+        
+	if ( swizzle.length() == 1 ){
+	        llvm::Value* swizzleIdx;
+                if ( swizzle[0] == 'x' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 0);
+                else if ( swizzle[0] == 'y' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 1);
+                else if ( swizzle[0] == 'z' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 2);
+                else
+                     swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 3);
+		
+		this->type = Type::floatType;
+                return llvm::ExtractElementInst::Create(base->llvm_val,swizzleIdx,"",irgen->GetBasicBlock());
+        }
+	else {
+		vector<llvm::Constant*> swizzle_vec;
+                for ( unsigned int i = 0; i < swizzle.length(); i++ ){
+                        if ( swizzle[i] == 'x' )
+                                swizzle_vec.push_back(llvm::ConstantInt::get(irgen->GetIntType(), 0));
+                        else if ( swizzle[i] == 'y' )
+                                swizzle_vec.push_back(llvm::ConstantInt::get(irgen->GetIntType(), 1));
+                        else if ( swizzle[i] == 'z' )
+                                swizzle_vec.push_back(llvm::ConstantInt::get(irgen->GetIntType(), 2));
+                        else if ( swizzle[i] == 'w' )
+                                swizzle_vec.push_back(llvm::ConstantInt::get(irgen->GetIntType(), 3));
+                }
+
+                llvm::ArrayRef<llvm::Constant*> swizzleArrayRef(swizzle_vec);
+                llvm::Constant *mask = llvm::ConstantVector::get(swizzleArrayRef);
+		this->type = base->type;
+                return new llvm::ShuffleVectorInst( base->llvm_val, base->llvm_val, mask, "", irgen->GetBasicBlock());
+	}	
+}
+
+llvm::Value* FieldAccess::InsertllvmElems(llvm::Value* insertVal){
+	string swizzles = string(field->GetName());
+	if ( swizzles.length() == 1){
+		llvm::Value* swizzleIdx;
+                if ( swizzles[0] == 'x' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 0);
+                else if ( swizzles[0] == 'y' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 1);
+                else if ( swizzles[0] == 'z' )
+                        swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 2);
+                else
+                     swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 3);
+
+		return llvm::InsertElementInst::Create(this->llvm_val, insertVal, swizzleIdx,"", irgen->GetBasicBlock());
+	}
+	else {
+		llvm::ShuffleVectorInst* insert_vector = dynamic_cast<llvm::ShuffleVectorInst*>(insertVal);	
+		llvm::Constant* swizzleIdx;
+		llvm::Value* insert_inst = this->llvm_val;
+
+		for ( unsigned int i = 0; i < swizzles.length(); i++ ){
+			if ( swizzles[i] == 'x' )
+                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 0);
+                	else if ( swizzles[i] == 'y' )
+                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 1);
+                	else if ( swizzles[i] == 'z' )
+                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 2);
+                	else
+                     		swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 3);
+
+			llvm::Value* extract_inst = llvm::ExtractElementInst::Create(insert_vector,swizzleIdx,"",irgen->GetBasicBlock());
+			insert_inst = llvm::InsertElementInst::Create(insert_inst, extract_inst,swizzleIdx,"", irgen->GetBasicBlock());
+		}
+		return insert_inst;
+	}
+}
+
+void FieldAccess::GetType(){
+	VarExpr* var_expr = dynamic_cast<VarExpr*>(base);
+	var_expr->GetType();
+	this->type = var_expr->type;
+}
+
 void FieldAccess::Emit(){
-	//TODO: not yet implemented
+	base->Emit();
+	this->llvm_val = base->llvm_val;
+	this->type = base->type;
 }
 
 /* AssignExpr Emit() */
@@ -184,177 +284,65 @@ void AssignExpr::Emit(){
 		right->Emit();
 		if ( dynamic_cast<ArrayAccess*>(right) != NULL)
                 	right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+		else if ( dynamic_cast<FieldAccess*>(right) != NULL){
+			FieldAccess* right_field = dynamic_cast<FieldAccess*>(right);
+			right->llvm_val = right_field->GetllvmField();
+			right->type = right_field->type;
+		}
+			
 
 		if ( lhs != NULL ){
 			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
 			new llvm::StoreInst(right->llvm_val, varsym->value, irgen->GetBasicBlock());
-			this->llvm_val = right->llvm_val;
 		}
 		else if ( lhs_arr != NULL ){
 			lhs_arr->Emit();
 			new llvm::StoreInst(right->llvm_val,lhs_arr->llvm_val, irgen->GetBasicBlock());
 			
-			this->llvm_val = right->llvm_val;
-			this->type = right->type;
 		}
+		else if ( lhs_field != NULL){
+			lhs_field->Emit();
+			VarExpr* var_expr = dynamic_cast<VarExpr*>(lhs_field->GetBase());
+			Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
+			llvm::Value* insert_inst = lhs_field->InsertllvmElems(right->llvm_val);
+			new llvm::StoreInst(insert_inst,varsym->value,true,irgen->GetBasicBlock());
+		}
+
+		this->llvm_val = right->llvm_val;
+		this->type = right->type;
 	}
 	else if ( op->IsOp("+=") ){
-		if ( lhs != NULL ){	
-			lhs->Emit();
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-			right->Emit();
-			if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-				right->llvm_val = new llvm::LoadInst(right->llvm_val,"", irgen->GetBasicBlock());
-			}
-			
-			if ( lhs->type == Type::intType || lhs->type == Type::boolType){
-				this->llvm_val = llvm::BinaryOperator::CreateAdd(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-			}
-			else if ( lhs->type == Type::floatType ){
-				this->llvm_val = llvm::BinaryOperator::CreateFAdd(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-			}
-
-			new llvm::StoreInst(this->llvm_val, varsym->value, irgen->GetBasicBlock());
-			this->type = right->type;
-		} 
-		else if ( lhs_arr != NULL ){
-			lhs_arr->Emit();
-			llvm::LoadInst* load_temp = new llvm::LoadInst(lhs_arr->llvm_val, "", irgen->GetBasicBlock());
-		
-			right->Emit();
-			if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-				right->llvm_val = new llvm::LoadInst(right->llvm_val, "", irgen->GetBasicBlock());
-			}
-			
-			if ( lhs_arr->type == Type::intType || lhs_arr->type == Type::boolType)
-				this->llvm_val = llvm::BinaryOperator::CreateAdd(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-			else if ( lhs_arr->type == Type::floatType)
-				this->llvm_val = llvm::BinaryOperator::CreateFAdd(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-
-			this->type = right->type;
-			
-			lhs_arr->Emit();
-			new llvm::StoreInst(this->llvm_val, lhs_arr->llvm_val, irgen->GetBasicBlock());
-		}
-
+		this->ops_perform("+");
 	}
 	else if ( op->IsOp("-=") ){
-		if ( lhs != NULL ){
-                        lhs->Emit();
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val,"", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs->type == Type::intType || lhs->type == Type::boolType){
-                                this->llvm_val = llvm::BinaryOperator::CreateSub(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-                        else if ( lhs->type == Type::floatType ){
-                                this->llvm_val = llvm::BinaryOperator::CreateFSub(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-
-                        new llvm::StoreInst(this->llvm_val, varsym->value, irgen->GetBasicBlock());
-                        this->type = right->type;
-                }
-                else if ( lhs_arr != NULL ){
-                        lhs_arr->Emit();
-                        llvm::LoadInst* load_temp = new llvm::LoadInst(lhs_arr->llvm_val, "", irgen->GetBasicBlock());
-
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val, "", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs_arr->type == Type::intType || lhs_arr->type == Type::boolType)
-                                this->llvm_val = llvm::BinaryOperator::CreateSub(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-                        else if ( lhs_arr->type == Type::floatType)
-                                this->llvm_val = llvm::BinaryOperator::CreateFSub(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-
-                        this->type = right->type;
-
-                        lhs_arr->Emit();
-                        new llvm::StoreInst(this->llvm_val, lhs_arr->llvm_val, irgen->GetBasicBlock());
-               }
+		this->ops_perform("-");
 	}
 	else if ( op->IsOp("*=") ){
-		if ( lhs != NULL ){
-                        lhs->Emit();
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val,"", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs->type == Type::intType || lhs->type == Type::boolType){
-                                this->llvm_val = llvm::BinaryOperator::CreateMul(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-                        else if ( lhs->type == Type::floatType ){
-                                this->llvm_val = llvm::BinaryOperator::CreateFMul(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-
-                        new llvm::StoreInst(this->llvm_val, varsym->value, irgen->GetBasicBlock());
-                        this->type = right->type;
-                }
-                else if ( lhs_arr != NULL ){
-                        lhs_arr->Emit();
-                        llvm::LoadInst* load_temp = new llvm::LoadInst(lhs_arr->llvm_val, "", irgen->GetBasicBlock());
-
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val, "", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs_arr->type == Type::intType || lhs_arr->type == Type::boolType)
-                                this->llvm_val = llvm::BinaryOperator::CreateMul(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-                        else if ( lhs_arr->type == Type::floatType)
-                                this->llvm_val = llvm::BinaryOperator::CreateFMul(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-
-                        this->type = right->type;
-
-                        lhs_arr->Emit();
-                        new llvm::StoreInst(this->llvm_val, lhs_arr->llvm_val, irgen->GetBasicBlock());
-                }
+		this->ops_perform("*");
 	}
 	else if ( op->IsOp("/=")) {
-		if ( lhs != NULL ){
-                        lhs->Emit();
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val,"", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs->type == Type::intType || lhs->type == Type::boolType){
-                                this->llvm_val = llvm::BinaryOperator::CreateSDiv(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-                        else if ( lhs->type == Type::floatType ){
-                                this->llvm_val = llvm::BinaryOperator::CreateFDiv(lhs->llvm_val,right->llvm_val,"",irgen->GetBasicBlock());
-                        }
-
-                        new llvm::StoreInst(this->llvm_val, varsym->value, irgen->GetBasicBlock());
-                        this->type = right->type;
-                }
-                else if ( lhs_arr != NULL ){
-                        lhs_arr->Emit();
-                        llvm::LoadInst* load_temp = new llvm::LoadInst(lhs_arr->llvm_val, "", irgen->GetBasicBlock());
-
-                        right->Emit();
-                        if ( dynamic_cast<ArrayAccess*>(right) != NULL ){
-                                right->llvm_val = new llvm::LoadInst(right->llvm_val, "", irgen->GetBasicBlock());
-                        }
-
-                        if ( lhs_arr->type == Type::intType || lhs_arr->type == Type::boolType)
-                                this->llvm_val = llvm::BinaryOperator::CreateSDiv(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-                        else if ( lhs_arr->type == Type::floatType)
-                                this->llvm_val = llvm::BinaryOperator::CreateFDiv(load_temp,right->llvm_val,"", irgen->GetBasicBlock());
-
-                        this->type = right->type;
-
-                        lhs_arr->Emit();
-                        new llvm::StoreInst(this->llvm_val, lhs_arr->llvm_val, irgen->GetBasicBlock());
-                }
+		this->ops_perform("/");
 	}
+}
+
+void AssignExpr::ops_perform(const char* opsTok){
+        yyltype loc;
+        ArithmeticExpr* arith = new ArithmeticExpr(left,new Operator(loc,opsTok), right);
+        arith->Emit();
+        this->llvm_val = arith->llvm_val;
+        this->type = arith->type;
+
+        VarExpr* var_expr = dynamic_cast<VarExpr*>(left);
+        ArrayAccess* arr_expr = dynamic_cast<ArrayAccess*>(left);
+
+        if ( var_expr != NULL ){
+                Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
+                new llvm::StoreInst(this->llvm_val, varsym->value, irgen->GetBasicBlock());
+        }
+        else if ( arr_expr != NULL ){
+                arr_expr->Emit();
+                new llvm::StoreInst(this->llvm_val, arr_expr->llvm_val, irgen->GetBasicBlock());
+        }
 }
 
 /* ArithmeticExpr Emit() */
@@ -406,8 +394,7 @@ void ArithmeticExpr::Emit(){
 
 }
 
-/* Equality Expr Emit() */
-void EqualityExpr::Emit() {
+void EqualityExpr::ops_perform(const char* opsTok){
 	left->Emit();
         if ( dynamic_cast<ArrayAccess*>(left) != NULL )
                 left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -416,43 +403,62 @@ void EqualityExpr::Emit() {
         if ( dynamic_cast<ArrayAccess*>(right) != NULL )
                 right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
 
-	this->type = Type::boolType;
+        this->type = Type::boolType;
 
+        llvm::CmpInst::Predicate pred;
+
+        if ( strcmp(opsTok,"==") == 0 )
+                pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_OEQ : llvm::ICmpInst::ICMP_EQ;
+        else /* strcmp(opsTok,"!=") == 0 */
+		pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_ONE : llvm::ICmpInst::ICMP_NE;
+
+        if ( left->type == Type::floatType ){
+                this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+        }
+        else {
+                this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+        }	
+}
+
+/* Equality Expr Emit() */
+void EqualityExpr::Emit() {
 	if ( op->IsOp("==") ){
-		if ( left->type == Type::intType || left->type == Type::boolType) {
-			llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_EQ;
-			if ( right->type == Type::floatType )
-				pred = llvm::FCmpInst::FCMP_OEQ;
-
-			this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp, pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-		}
-		else if ( left->type == Type::floatType ){
-			llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OEQ;
-			if ( right->type != left->type )
-				pred = llvm::ICmpInst::ICMP_EQ;
-
-			this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp, pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-		}
+		this->ops_perform("==");
 	}
 	else if ( op->IsOp("!=") ){
-		if ( left->type == Type::intType || left->type == Type::boolType) {
-                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_NE;
-                        if ( right->type == Type::floatType )
-                                pred = llvm::FCmpInst::FCMP_ONE;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp, pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-                else if ( left->type == Type::floatType ){
-                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_ONE;
-                        if ( right->type != left->type )
-                                pred = llvm::ICmpInst::ICMP_NE;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp, pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }	
+		this->ops_perform("!=");
 	}		
 }
 
+void LogicalExpr::ops_perform(const char* opsTok){
+	left->Emit();
+        if ( dynamic_cast<ArrayAccess*>(left) != NULL )
+                left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
+
+        right->Emit();
+        if ( dynamic_cast<ArrayAccess*>(right) != NULL )
+                right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
+
+        this->type = Type::boolType;
+
+        if ( strcmp(opsTok,"&&") ){
+                this->llvm_val = llvm::BinaryOperator::CreateAnd(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+        }
+        else /* ( opsTok == "||" )*/ {
+                this->llvm_val = llvm::BinaryOperator::CreateOr(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+        }
+}
+
 void LogicalExpr::Emit(){
+	if ( op->IsOp("&&") ){
+		this->ops_perform("&&");
+	}
+	else {
+		this->ops_perform("||");
+	}
+}
+
+void RelationalExpr::ops_perform(const char* opsTok){
 	left->Emit();
         if ( dynamic_cast<ArrayAccess*>(left) != NULL )
                 left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -462,134 +468,90 @@ void LogicalExpr::Emit(){
                 right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
 
 	this->type = Type::boolType;
+	
+	llvm::CmpInst::Predicate pred;
 
-	if ( op->IsOp("&&") ){
-		this->llvm_val = llvm::BinaryOperator::CreateAnd(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-	}
-	else if ( op->IsOp("||") ){
-		this->llvm_val = llvm::BinaryOperator::CreateOr(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-	}
+	if ( strcmp(opsTok,">") == 0 )
+		pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_OGT : llvm::ICmpInst::ICMP_SGT;
+	else if ( strcmp(opsTok,"<") == 0 )
+		pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_OLT : llvm::ICmpInst::ICMP_SLT;
+	else if ( strcmp(opsTok,">=") == 0 )
+                pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_OGE : llvm::ICmpInst::ICMP_SGE;
+	else /* <= */
+                pred = (right->type == Type::floatType) ? llvm::FCmpInst::FCMP_OLE : llvm::ICmpInst::ICMP_SLE;
+
+	if ( left->type == Type::floatType ){
+		this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+        }
+	else {
+		this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
+	}		
+	
 }
 
 void RelationalExpr::Emit(){
-	left->Emit();
-        if ( dynamic_cast<ArrayAccess*>(left) != NULL )
-                left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
-
-        right->Emit();
-        if ( dynamic_cast<ArrayAccess*>(right) != NULL )
-                right->llvm_val = new llvm::LoadInst(right->llvm_val,"",irgen->GetBasicBlock());
-
-	this->type = Type::boolType;
-
 	if ( op->IsOp(">") ){
-                if ( left->type == Type::intType || left->type == Type::boolType) {
-                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SGT;
-                        if ( right->type == Type::floatType )
-                                pred = llvm::FCmpInst::FCMP_OGT;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-                else if ( left->type == Type::floatType ){
-                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OGT;
-                        if ( right->type != left->type )
-                                pred = llvm::ICmpInst::ICMP_SGT;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-        }
+        	this->ops_perform(">");
+	}
 	else if ( op->IsOp("<") ){
-                if ( left->type == Type::intType || left->type == Type::boolType) {
-                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SLT;
-                        if ( right->type == Type::floatType )
-                                pred = llvm::FCmpInst::FCMP_OLT;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-                else if ( left->type == Type::floatType ){
-                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OLT;
-                        if ( right->type != left->type )
-                                pred = llvm::ICmpInst::ICMP_SLT;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-        }
+        	this->ops_perform("<");
+	}
 	else if ( op->IsOp(">=") ){
-                if ( left->type == Type::intType || left->type == Type::boolType) {
-                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SGE;
-                        if ( right->type == Type::floatType )
-                                pred = llvm::FCmpInst::FCMP_OGE;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-                else if ( left->type == Type::floatType ){
-                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OGE;
-                        if ( right->type != left->type )
-                                pred = llvm::ICmpInst::ICMP_SGE;
-
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-        }
+        	this->ops_perform(">=");
+	}
 	else if ( op->IsOp("<=") ){
-                if ( left->type == Type::intType || left->type == Type::boolType) {
-                        llvm::CmpInst::Predicate pred = llvm::ICmpInst::ICMP_SLE;
-                        if ( right->type == Type::floatType )
-                                pred = llvm::FCmpInst::FCMP_OLE;
+        	this->ops_perform("<=");
+	}
+}
 
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::ICmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-                else if ( left->type == Type::floatType ){
-                        llvm::CmpInst::Predicate pred = llvm::FCmpInst::FCMP_OLE;
-                        if ( right->type != left->type )
-                                pred = llvm::ICmpInst::ICMP_SLE;
+void PostfixExpr::ops_perform(const char* opsTok){
+	VarExpr* var_expr = dynamic_cast<VarExpr*>(left);
+        ArrayAccess* arr_expr = dynamic_cast<ArrayAccess*>(left);
+	
+	if ( var_expr != NULL ){
+		var_expr->GetType();
+	}
+	else if ( arr_expr != NULL){
+		arr_expr->GetType();
+	}
 
-                        this->llvm_val = llvm::CmpInst::Create(llvm::CmpInst::FCmp,pred, left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
-                }
-        }
+	yyltype loc;
+	Expr* rhs;
+	if ( left->type == Type::intType )
+		rhs = new IntConstant(loc,1);
+	else if ( left->type == Type::floatType )
+		rhs = new FloatConstant(loc,(double) 1);
+	else if ( left->type == Type::boolType)
+		rhs = new BoolConstant(loc, (int) true);
+
+	ArithmeticExpr* arith;
+	if ( strcmp(opsTok,"++") == 0 )
+		arith = new ArithmeticExpr(left,new Operator(loc,"+"),rhs);
+	else /* opsTok = "--" */
+		arith = new ArithmeticExpr(left,new Operator(loc,"-"),rhs);
+
+	arith->Emit();
+
+	this->llvm_val = left->llvm_val;
+	this->type = left->type;	
+
+	if ( var_expr != NULL ){
+		Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
+		new llvm::StoreInst(arith->llvm_val,varsym->value,true,irgen->GetBasicBlock());
+	}
+	else if ( arr_expr != NULL ){
+		new llvm::StoreInst(arith->llvm_val,arr_expr->getElemPtrInst,true,irgen->GetBasicBlock());
+		
+	}
 }
 
 void PostfixExpr::Emit(){
-	VarExpr* lhs = dynamic_cast<VarExpr*>(left);
-	ArrayAccess* lhs_arr = dynamic_cast<ArrayAccess*>(left);
-	llvm::Value* inst;
-	
 	if ( op->IsOp("++") ){
-		if ( lhs != NULL ){
-			lhs->Emit();
-			Symbol* varsym = symbolTable->findAllScope(lhs->GetIdentifier()->GetName());
-
-			if ( left->type == Type::intType )
- 	                       inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
-	                else if ( left->type == Type::boolType)
-        	               inst = llvm::BinaryOperator::CreateAdd(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
-             	   	else if ( left->type == Type::floatType )
-                	       inst = llvm::BinaryOperator::CreateFAdd(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
-			
-			new llvm::StoreInst(inst,varsym->value,true,irgen->GetBasicBlock());
-		}
-		else if ( lhs_arr != NULL ){
-			lhs_arr->Emit();
-			llvm::LoadInst* load_inst = new llvm::LoadInst(lhs_arr->llvm_val,"",irgen->GetBasicBlock());
-
-			if ( left->type == Type::intType )
-                               inst = llvm::BinaryOperator::CreateAdd(load_inst, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
-                        else if ( left->type == Type::boolType)
-                               inst = llvm::BinaryOperator::CreateAdd(load_inst, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());
-                        else if ( left->type == Type::floatType )
-                               inst = llvm::BinaryOperator::CreateFAdd(load_inst, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
-
-			new llvm::StoreInst(inst,lhs_arr->llvm_val,true,irgen->GetBasicBlock());
-		}
+		this->ops_perform("++");				
 	}
-
 	else if ( op->IsOp("--") ){
-                if ( left->type == Type::intType )
-                        inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetIntType(),1), "", irgen->GetBasicBlock());
-                else if ( left->type == Type::boolType)
-                        inst = llvm::BinaryOperator::CreateSub(left->llvm_val, llvm::ConstantInt::get(irgen->GetBoolType(),(int) true), "", irgen->GetBasicBlock());                else if ( left->type == Type::floatType )
-                        inst = llvm::BinaryOperator::CreateFSub(left->llvm_val, llvm::ConstantFP::get(irgen->GetFloatType(),(double)1), "", irgen->GetBasicBlock());
-        }
-
+        	this->ops_perform("--");
+	}
 }
 
 Call::Call(yyltype loc, Expr *b, Identifier *f, List<Expr*> *a) : Expr(loc)  {
