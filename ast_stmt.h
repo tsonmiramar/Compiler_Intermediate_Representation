@@ -85,10 +85,9 @@ class LoopStmt : public ConditionalStmt
   public:
     LoopStmt(Expr *testExpr, Stmt *body)
             : ConditionalStmt(testExpr, body) {}
-
+    virtual void Emit() {}
     llvm::BasicBlock* hb;
     llvm::BasicBlock* fb;
-    virtual void Emit() {}
 };
 
 class ForStmt : public LoopStmt 
@@ -173,6 +172,7 @@ class SwitchLabel : public Stmt
     SwitchLabel(Expr *label, Stmt *stmt);
     SwitchLabel(Stmt *stmt);
     void PrintChildren(int indentLevel);
+    Stmt* GetStmt() { return stmt; }
 
 };
 
@@ -182,6 +182,7 @@ class Case : public SwitchLabel
     Case() : SwitchLabel() {}
     Case(Expr *label, Stmt *stmt) : SwitchLabel(label, stmt) {}
     const char *GetPrintNameForNode() { return "Case"; }
+    Expr* GetLabel(){ return label; }
 };
 
 class Default : public SwitchLabel
@@ -203,6 +204,7 @@ class SwitchStmt : public Stmt
     SwitchStmt(Expr *expr, List<Stmt*> *cases, Default *def);
     virtual const char *GetPrintNameForNode() { return "SwitchStmt"; }
     void PrintChildren(int indentLevel);
+    llvm::BasicBlock* fb;
     virtual void Emit();
 };
 

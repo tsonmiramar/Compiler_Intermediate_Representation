@@ -251,8 +251,11 @@ void WhileStmt::PrintChildren(int indentLevel) {
 
 void BreakStmt::Emit(){
 	LoopStmt* loop_stmt = dynamic_cast<LoopStmt*>(loop_switchStack->top());
-	
-	llvm::BranchInst::Create(loop_stmt->fb,irgen->GetBasicBlock());
+	SwitchStmt* switch_stmt = dynamic_cast<SwitchStmt*>(loop_switchStack->top());
+	if ( loop_stmt != NULL )
+		llvm::BranchInst::Create(loop_stmt->fb,irgen->GetBasicBlock());
+	else
+		llvm::BranchInst::Create(switch_stmt->fb,irgen->GetBasicBlock());
 }
 
 void ContinueStmt::Emit(){
@@ -383,8 +386,64 @@ void SwitchStmt::PrintChildren(int indentLevel) {
 }
 
 void SwitchStmt::Emit(){
+	symbolTable->push();
 
-	llvm::BasicBlock *switchExitBB = llvm::BasicBlock::Create(*context, "switchExit", irgen->GetFunction());
+	llvm::BasicBlock *switchExitBB = llvm::BasicBlock::Create(*irgen->GetContext(), "switchExit", irgen->GetFunction());
+
+	this->fb = switchExitBB;
+
+	loop_switchStack->push(this);
+	
 	expr->Emit();
+
+	llvm::SwitchInst* switch_inst = llvm::SwitchInst::Create(expr->llvm_val, switchExitBB, cases->NumElements(),irgen->GetBasicBlock());
+	
+	vector<llvm::BasicBlock*> caseBBList;
+	for ( int i = 0; i < cases->NumElements(); i++ ){
+		
+		Case* case_expr = dynamic_cast<Case*>(cases->Nth(i));
+		SwitchLabel* switch_label = dynamic_cast<SwitchLabel*>(cases->Nth(i));
+		if ( switch_label == NULL ){
+			continue;
+		}
+
+		llvm::BasicBlock* caseBB;
+		if ( case_expr != NULL)
+			caseBB = llvm::BasicBlock::Create(*irgen->GetContext(), "switchCase" + to_string(i), irgen->GetFunction());
+		else{
+			caseBB = llvm::BasicBlock::Create(*irgen->GetContext(), "switchDef", irgen->GetFunction());
+			switch_inst->setDefaultDest(caseBB);
+		}
+
+		if ( i == 0 )
+			caseBB->moveAfter(irgen->GetBasicBlock());
+
+		caseBBList.push_back(caseBB);
+
+		if ( case_expr != NULL ){
+			case_expr->GetLabel()->Emit();
+			llvm::ConstantInt *constLabelVal = llvm::cast<llvm::ConstantInt>(case_expr->GetLabel()->llvm_val);	
+			switch_inst->llvm::SwitchInst::addCase(constLabelVal, caseBB);
+		}
+
+		irgen->SetBasicBlock(caseBB);
+		switch_label->GetStmt()->Emit();
+	}
+
+	for ( unsigned int i = 0; i < caseBBList.size(); i++ ){
+		if ( !caseBBList[i]->getTerminator() ){
+			if ( i == caseBBList.size() -1 )
+				llvm::BranchInst::Create(switchExitBB,caseBBList[i]);
+			else
+				llvm::BranchInst::Create(caseBBList[i+1],caseBBList[i]);
+		}
+	}
+
+	switchExitBB->moveAfter(caseBBList.back());
+	
+	irgen->SetBasicBlock(switchExitBB);
+
+	loop_switchStack->pop();
+	symbolTable->pop();
 }
 
