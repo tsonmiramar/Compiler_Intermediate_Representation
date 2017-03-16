@@ -1,0 +1,18 @@
+Project Description:
+
+We implemented PA4 with one by one:
+
+First of all, We started by reimplementing the Symbol Table in symtable.cc.
+
+Then we start the IR generation process with global and function declaration in ast_decl.cc. This step involves adding some new necessary elements in VarDecl and FnDeclclasses to hold information about llvm::Value*
+
+Then we tested thoroughly our implementation before moving on to the next step.
+
+Next, we worked on getting all the expression correct. This is the hardest and most consuming part to work on. We spend 3 days finishing and polising all the expressions and their combination with others. 
+
+Lastly, we finished with the ast_stmt.cc implementation to take care of BasicBlock position when using each of the individual or nested statements.
+
+We tested our implementation incrementally one file by one before we tackle the nextfiles.
+
+Son Do
+Tuan Dang
