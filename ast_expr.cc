@@ -192,7 +192,7 @@ llvm::Value* FieldAccess::InsertWithUndef(Type* newType, llvm::Value* insertVal)
 		swizzle_len =4;
 
 	llvm::Value* dest_vec = llvm::UndefValue::get(Decl::GetllvmType(newType));
-	for ( unsigned int i = 0; i < swizzle_len; i++ ){
+	for ( int i = 0; i < swizzle_len; i++ ){
 		dest_vec = llvm::InsertElementInst::Create(dest_vec,insertVal,llvm::ConstantInt::get(irgen->GetIntType(),i),"",irgen->GetBasicBlock());	
 	}
 	return dest_vec;	
@@ -317,7 +317,7 @@ void AssignExpr::Emit(){
 	}
 }
 
-void AssignExpr::ops_perform(const char* opsTok){
+void AssignExpr::ops_perform(const char* opsTok, bool doPrefix){
         yyltype loc;
         ArithmeticExpr* arith = new ArithmeticExpr(left,new Operator(loc,opsTok), right);
         VarExpr* var_expr = dynamic_cast<VarExpr*>(left);
@@ -363,18 +363,33 @@ void AssignExpr::ops_perform(const char* opsTok){
 	}
 }
 
-void ArithmeticExpr::ops_perform(const char* opsTok){}
-
+void ArithmeticExpr::ops_perform(const char* opsTok, bool doPrefix){
+	/* This form only do ++ and -- */
+	yyltype loc;
+	PostfixExpr* prefix = new PostfixExpr(right,new Operator(loc,opsTok));
+	prefix->doPrefix = true;
+	prefix->Emit();
+	this->llvm_val = prefix->llvm_val;
+	this->type = prefix->type;
+}
 
 /* ArithmeticExpr Emit() */
 void ArithmeticExpr::Emit(){
-	
+	if ( op->IsOp("++") ){
+		this->ops_perform("++");
+		return;
+	}
+	else if ( op->IsOp("--") ){
+		this->ops_perform("--");
+		return;
+	}
+
 	ArrayAccess* lhs_arr = dynamic_cast<ArrayAccess*>(left);
 	FieldAccess* lhs_field = dynamic_cast<FieldAccess*>(left);
 
 	ArrayAccess* rhs_arr = dynamic_cast<ArrayAccess*>(right);
         FieldAccess* rhs_field = dynamic_cast<FieldAccess*>(right);
-
+	
 	left->Emit();
 	if ( lhs_arr != NULL )
 		left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -468,7 +483,7 @@ void ArithmeticExpr::Emit(){
 
 }
 
-void EqualityExpr::ops_perform(const char* opsTok){
+void EqualityExpr::ops_perform(const char* opsTok, bool doPrefix){
 	left->Emit();
         if ( dynamic_cast<ArrayAccess*>(left) != NULL )
                 left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -504,7 +519,7 @@ void EqualityExpr::Emit() {
 	}		
 }
 
-void LogicalExpr::ops_perform(const char* opsTok){
+void LogicalExpr::ops_perform(const char* opsTok, bool doPrefix){
 	left->Emit();
         if ( dynamic_cast<ArrayAccess*>(left) != NULL )
                 left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -532,7 +547,7 @@ void LogicalExpr::Emit(){
 	}
 }
 
-void RelationalExpr::ops_perform(const char* opsTok){
+void RelationalExpr::ops_perform(const char* opsTok,bool doPrefix){
 	left->Emit();
         if ( dynamic_cast<ArrayAccess*>(left) != NULL )
                 left->llvm_val = new llvm::LoadInst(left->llvm_val,"",irgen->GetBasicBlock());
@@ -578,7 +593,7 @@ void RelationalExpr::Emit(){
 	}
 }
 
-void PostfixExpr::ops_perform(const char* opsTok){
+void PostfixExpr::ops_perform(const char* opsTok, bool doPrefix){
 	VarExpr* var_expr = dynamic_cast<VarExpr*>(left);
         ArrayAccess* arr_expr = dynamic_cast<ArrayAccess*>(left);
 	
@@ -595,7 +610,7 @@ void PostfixExpr::ops_perform(const char* opsTok){
 		rhs = new IntConstant(loc,1);
 	else if ( left->type == Type::floatType )
 		rhs = new FloatConstant(loc,(double) 1);
-	else if ( left->type == Type::boolType)
+	else /*( left->type == Type::boolType)*/
 		rhs = new BoolConstant(loc, (int) true);
 
 	ArithmeticExpr* arith;
@@ -605,9 +620,15 @@ void PostfixExpr::ops_perform(const char* opsTok){
 		arith = new ArithmeticExpr(left,new Operator(loc,"-"),rhs);
 
 	arith->Emit();
-
-	this->llvm_val = left->llvm_val;
-	this->type = left->type;	
+	
+	if ( !doPrefix ){
+		this->llvm_val = left->llvm_val;
+		this->type = left->type;	
+	}
+	else{
+		this->llvm_val = arith->llvm_val;
+                this->type = arith->type;
+	}
 
 	if ( var_expr != NULL ){
 		Symbol* varsym = symbolTable->findAllScope(var_expr->GetIdentifier()->GetName());
@@ -621,10 +642,10 @@ void PostfixExpr::ops_perform(const char* opsTok){
 
 void PostfixExpr::Emit(){
 	if ( op->IsOp("++") ){
-		this->ops_perform("++");				
+		this->ops_perform("++",doPrefix);				
 	}
 	else if ( op->IsOp("--") ){
-        	this->ops_perform("--");
+        	this->ops_perform("--",doPrefix);
 	}
 }
 

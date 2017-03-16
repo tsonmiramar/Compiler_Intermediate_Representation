@@ -125,7 +125,7 @@ class CompoundExpr : public Expr
     CompoundExpr(Operator *op, Expr *rhs);             // for unary
     CompoundExpr(Expr *lhs, Operator *op);             // for unary
     void PrintChildren(int indentLevel);
-    virtual void ops_perform(const char* opsTok) {};
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false) {};
     virtual void Emit() {}
 };
 
@@ -135,7 +135,7 @@ class ArithmeticExpr : public CompoundExpr
     ArithmeticExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     ArithmeticExpr(Operator *op, Expr *rhs) : CompoundExpr(op,rhs) {}
     const char *GetPrintNameForNode() { return "ArithmeticExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok, bool doPrefix=false);
     virtual void Emit();
 };
 
@@ -144,7 +144,7 @@ class RelationalExpr : public CompoundExpr
   public:
     RelationalExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     const char *GetPrintNameForNode() { return "RelationalExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false);
     virtual void Emit();
 };
 
@@ -153,7 +153,7 @@ class EqualityExpr : public CompoundExpr
   public:
     EqualityExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     const char *GetPrintNameForNode() { return "EqualityExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false);
     virtual void Emit();
 };
 
@@ -163,7 +163,7 @@ class LogicalExpr : public CompoundExpr
     LogicalExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     LogicalExpr(Operator *op, Expr *rhs) : CompoundExpr(op,rhs) {}
     const char *GetPrintNameForNode() { return "LogicalExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false);
     virtual void Emit();
 };
 
@@ -172,16 +172,17 @@ class AssignExpr : public CompoundExpr
   public:
     AssignExpr(Expr *lhs, Operator *op, Expr *rhs) : CompoundExpr(lhs,op,rhs) {}
     const char *GetPrintNameForNode() { return "AssignExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false);
     virtual void Emit();
 };
 
 class PostfixExpr : public CompoundExpr
 {
   public:
-    PostfixExpr(Expr *lhs, Operator *op) : CompoundExpr(lhs,op) {}
+    PostfixExpr(Expr *lhs, Operator *op) : CompoundExpr(lhs,op) { doPrefix = false;}
     const char *GetPrintNameForNode() { return "PostfixExpr"; }
-    virtual void ops_perform(const char* opsTok);
+    virtual void ops_perform(const char* opsTok,bool doPrefix=false);
+    bool doPrefix;
     virtual void Emit();
 };
 
