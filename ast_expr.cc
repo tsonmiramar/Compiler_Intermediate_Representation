@@ -268,17 +268,19 @@ llvm::Value* FieldAccess::InsertllvmElems(llvm::Value* insertVal){
 		llvm::Value* insert_inst = this->llvm_val;
 
 		for ( unsigned int i = 0; i < swizzles.length(); i++ ){
+			swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), i);
+			llvm::Constant* swizzleTobeInsert;
 			if ( swizzles[i] == 'x' )
-                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 0);
+                        	swizzleTobeInsert = llvm::ConstantInt::get(irgen->GetIntType(), 0);
                 	else if ( swizzles[i] == 'y' )
-                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 1);
+                        	swizzleTobeInsert = llvm::ConstantInt::get(irgen->GetIntType(), 1);
                 	else if ( swizzles[i] == 'z' )
-                        	swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 2);
+                        	swizzleTobeInsert = llvm::ConstantInt::get(irgen->GetIntType(), 2);
                 	else
-                     		swizzleIdx = llvm::ConstantInt::get(irgen->GetIntType(), 3);
+                     		swizzleTobeInsert = llvm::ConstantInt::get(irgen->GetIntType(), 3);
 
 			llvm::Value* extract_inst = llvm::ExtractElementInst::Create(insertVal,swizzleIdx,"",irgen->GetBasicBlock());
-			insert_inst = llvm::InsertElementInst::Create(insert_inst, extract_inst,swizzleIdx,"", irgen->GetBasicBlock());
+			insert_inst = llvm::InsertElementInst::Create(insert_inst, extract_inst,swizzleTobeInsert,"", irgen->GetBasicBlock());
 		}
 		return insert_inst;
 	}
