@@ -180,6 +180,9 @@ void FnDecl::Emit(){
 	}
 
 	llvm::BranchInst::Create(nextBB,entryBB);
-	new llvm::UnreachableInst(*irgen->GetContext(), irgen->GetBasicBlock());
+	if ( !irgen->GetBasicBlock()->getTerminator() )
+		new llvm::UnreachableInst(*irgen->GetContext(), irgen->GetBasicBlock());
 	symbolTable->pop();
+
+	irgen->SetBasicBlock(NULL);
 }

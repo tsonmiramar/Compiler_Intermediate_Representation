@@ -89,6 +89,7 @@ class MyStack {
 
   public:
     void push(Stmt *s) { stmtStack.push_back(s); }
+    Stmt* top() { return stmtStack.back(); }
     void pop()         { if (stmtStack.size() > 0 ) stmtStack.pop_back(); }
     bool insideLoop();
     bool insideSwitch();

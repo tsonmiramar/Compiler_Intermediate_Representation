@@ -139,9 +139,54 @@ void ForStmt::PrintChildren(int indentLevel) {
     body->Print(indentLevel+1, "(body) ");
 }
 
+void WhileStmt::Emit(){
+	symbolTable->push();
+	llvm::BasicBlock *fb = llvm::BasicBlock::Create(*irgen->GetContext(), "footerBB", irgen->GetFunction());
+	llvm::BasicBlock *bb = llvm::BasicBlock::Create(*irgen->GetContext(), "bodyBB", irgen->GetFunction());
+	llvm::BasicBlock *hb = llvm::BasicBlock::Create(*irgen->GetContext(), "headerBB", irgen->GetFunction());
+
+	this->hb = hb;
+	this->fb = fb;
+
+	loop_switchStack->push(this);
+	llvm::BranchInst::Create(hb, irgen->GetBasicBlock());
+
+	hb->moveAfter(irgen->GetBasicBlock());
+	bb->moveAfter(hb);
+	fb->moveAfter(bb);
+
+	irgen->SetBasicBlock(hb);
+
+	test->Emit();
+
+	llvm::BranchInst::Create(bb,fb,test->llvm_val,irgen->GetBasicBlock());
+
+	irgen->SetBasicBlock(bb);
+	body->Emit();
+	if ( !irgen->GetBasicBlock()->getTerminator() )
+		llvm::BranchInst::Create(hb, irgen->GetBasicBlock());
+
+	irgen->SetBasicBlock(fb);
+
+	loop_switchStack->pop();
+	symbolTable->pop();	
+
+}
+
 void WhileStmt::PrintChildren(int indentLevel) {
     test->Print(indentLevel+1, "(test) ");
     body->Print(indentLevel+1, "(body) ");
+}
+
+void BreakStmt::Emit(){
+	LoopStmt* loop_stmt = dynamic_cast<LoopStmt*>(loop_switchStack->top());
+	
+	llvm::BranchInst::Create(loop_stmt->fb,irgen->GetBasicBlock());
+}
+
+void ContinueStmt::Emit(){
+	LoopStmt* loop_stmt = dynamic_cast<LoopStmt*>(loop_switchStack->top());
+        llvm::BranchInst::Create(loop_stmt->hb,irgen->GetBasicBlock());
 }
 
 IfStmt::IfStmt(Expr *t, Stmt *tb, Stmt *eb): ConditionalStmt(t, tb) { 
@@ -213,6 +258,16 @@ ReturnStmt::ReturnStmt(yyltype loc, Expr *e) : Stmt(loc) {
 void ReturnStmt::PrintChildren(int indentLevel) {
     if ( expr ) 
       expr->Print(indentLevel+1);
+}
+
+void ReturnStmt::Emit(){
+	if (expr != NULL ){
+		expr->Emit();
+		llvm::ReturnInst::Create(*irgen->GetContext(), expr->llvm_val, irgen->GetBasicBlock());
+	}
+	else{
+		llvm::ReturnInst::Create(*irgen->GetContext(), irgen->GetBasicBlock());
+	}
 }
 
 SwitchLabel::SwitchLabel(Expr *l, Stmt *s) {
