@@ -139,6 +139,77 @@ void ForStmt::PrintChildren(int indentLevel) {
     body->Print(indentLevel+1, "(body) ");
 }
 
+void ForStmt::Emit(){
+	symbolTable->push();
+	llvm::BasicBlock *fb = llvm::BasicBlock::Create(*irgen->GetContext(), "footerBB", irgen->GetFunction());
+	llvm::BasicBlock *sb;
+	
+	if ( step != NULL)
+		sb = llvm::BasicBlock::Create(*irgen->GetContext(), "stepBB", irgen->GetFunction());
+
+        llvm::BasicBlock *bb = llvm::BasicBlock::Create(*irgen->GetContext(), "bodyBB", irgen->GetFunction());
+        llvm::BasicBlock *hb = llvm::BasicBlock::Create(*irgen->GetContext(), "headerBB", irgen->GetFunction());
+
+	this->hb = hb;
+	this->fb = fb;
+	if ( step != NULL)
+		this->sb = sb;
+
+	hb->moveAfter(irgen->GetBasicBlock());
+	bb->moveAfter(hb);
+	if ( step != NULL ){
+		sb->moveAfter(bb);
+		fb->moveAfter(sb);
+	}
+	else{
+		fb->moveAfter(bb);
+	}
+
+	loop_switchStack->push(this);
+
+	init->Emit();
+	llvm::BranchInst::Create(hb,irgen->GetBasicBlock());
+
+	irgen->SetBasicBlock(hb);
+
+	test->Emit();
+	
+	llvm::BranchInst::Create(bb,fb,test->llvm_val,irgen->GetBasicBlock());
+
+	irgen->SetBasicBlock(bb);
+	
+	body->Emit();
+
+	if ( !irgen->GetBasicBlock()->getTerminator() ){
+		if ( step != NULL ){
+			llvm::BranchInst::Create(sb,irgen->GetBasicBlock());
+		}
+		else
+			llvm::BranchInst::Create(hb,irgen->GetBasicBlock());
+
+		if ( step != NULL ){
+			irgen->SetBasicBlock(sb);
+			step->Emit();
+			
+			llvm::BranchInst::Create(hb, irgen->GetBasicBlock());
+		}
+	}
+	else {
+		if ( step != NULL ){
+                        irgen->SetBasicBlock(sb);
+                        step->Emit();
+
+                        llvm::BranchInst::Create(hb, irgen->GetBasicBlock());
+                }			
+	}
+
+	irgen->SetBasicBlock(fb);
+
+	loop_switchStack->pop();
+	symbolTable->pop();
+	
+}
+
 void WhileStmt::Emit(){
 	symbolTable->push();
 	llvm::BasicBlock *fb = llvm::BasicBlock::Create(*irgen->GetContext(), "footerBB", irgen->GetFunction());
@@ -186,7 +257,16 @@ void BreakStmt::Emit(){
 
 void ContinueStmt::Emit(){
 	LoopStmt* loop_stmt = dynamic_cast<LoopStmt*>(loop_switchStack->top());
-        llvm::BranchInst::Create(loop_stmt->hb,irgen->GetBasicBlock());
+	ForStmt* for_stmt = dynamic_cast<ForStmt*>(loop_switchStack->top());
+	if ( for_stmt != NULL ){
+		if ( for_stmt->sb != NULL )
+	        	llvm::BranchInst::Create(for_stmt->sb,irgen->GetBasicBlock());
+		else
+			llvm::BranchInst::Create(for_stmt->hb,irgen->GetBasicBlock());
+	}
+	else{
+		llvm::BranchInst::Create(loop_stmt->hb,irgen->GetBasicBlock());
+	}
 }
 
 IfStmt::IfStmt(Expr *t, Stmt *tb, Stmt *eb): ConditionalStmt(t, tb) { 
@@ -213,13 +293,6 @@ void IfStmt::Emit(){
 
 	llvm::BasicBlock* tb = llvm::BasicBlock::Create(*irgen->GetContext(), "ThenBB", irgen->GetFunction());
 	
-	if ( elseBody !=NULL ){
-		llvm::BranchInst::Create(tb,eb,test->llvm_val,irgen->GetBasicBlock());
-	}
-	else{
-		llvm::BranchInst::Create(tb,fb,test->llvm_val,irgen->GetBasicBlock());
-	}
-	
 	tb->moveAfter(irgen->GetBasicBlock());
 	if ( elseBody != NULL ){
 		eb->moveAfter(tb);
@@ -229,22 +302,30 @@ void IfStmt::Emit(){
 		fb->moveAfter(tb);
 	}
 
+	
+	if ( elseBody !=NULL ){
+                llvm::BranchInst::Create(tb,eb,test->llvm_val,irgen->GetBasicBlock());
+        }
+        else{
+                llvm::BranchInst::Create(tb,fb,test->llvm_val,irgen->GetBasicBlock());
+	}
+
+
 	irgen->SetBasicBlock(tb);
 	body->Emit();
 
-	if ( !irgen->GetBasicBlock()->getTerminator()){	
+	if ( !irgen->GetBasicBlock()->getTerminator()){
 		llvm::BranchInst::Create(fb,irgen->GetBasicBlock());
-
 	}
-
+	
 	if ( elseBody != NULL ){
 		irgen->SetBasicBlock(eb);
 		elseBody->Emit();
 
-		if ( !irgen->GetBasicBlock()->getTerminator()){
-                	llvm::BranchInst::Create(fb,irgen->GetBasicBlock());
-		}	
-        }
+		if ( !irgen->GetBasicBlock()->getTerminator() ){
+			llvm::BranchInst::Create(fb,irgen->GetBasicBlock());
+		}
+	}
 
 	irgen->SetBasicBlock(fb);
 }
@@ -299,5 +380,11 @@ void SwitchStmt::PrintChildren(int indentLevel) {
     if (expr) expr->Print(indentLevel+1);
     if (cases) cases->PrintAll(indentLevel+1);
     if (def) def->Print(indentLevel+1);
+}
+
+void SwitchStmt::Emit(){
+
+	llvm::BasicBlock *switchExitBB = llvm::BasicBlock::Create(*context, "switchExit", irgen->GetFunction());
+	expr->Emit();
 }
 

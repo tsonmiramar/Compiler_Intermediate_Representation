@@ -100,7 +100,8 @@ class ForStmt : public LoopStmt
     ForStmt(Expr *init, Expr *test, Expr *step, Stmt *body);
     const char *GetPrintNameForNode() { return "ForStmt"; }
     void PrintChildren(int indentLevel);
-    virtual void Emit(){}
+    llvm::BasicBlock* sb;
+    virtual void Emit();
 };
 
 class WhileStmt : public LoopStmt 
@@ -202,7 +203,7 @@ class SwitchStmt : public Stmt
     SwitchStmt(Expr *expr, List<Stmt*> *cases, Default *def);
     virtual const char *GetPrintNameForNode() { return "SwitchStmt"; }
     void PrintChildren(int indentLevel);
-    virtual void Emit(){};
+    virtual void Emit();
 };
 
 class SwitchStmtError : public SwitchStmt
