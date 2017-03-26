@@ -293,7 +293,11 @@ void FieldAccess::GetType(){
 }
 
 void FieldAccess::Emit(){
+	FieldAccess* field_expr = dynamic_cast<FieldAccess*>(base);
 	base->Emit();
+	if ( field_expr != NULL ){
+		base->llvm_val = field_expr->GetllvmField();
+	}
 	this->llvm_val = base->llvm_val;
 	this->type = base->type;
 }
