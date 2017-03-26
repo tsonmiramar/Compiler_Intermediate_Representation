@@ -1,0 +1,5 @@
+funct: multipleop
+param: int, 2
+param: int, 3
+gin: a, int, 4
+gin: b, int, 5

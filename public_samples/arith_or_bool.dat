@@ -1,0 +1,3 @@
+funct: arith
+gin: x, bool, true
+gin: y, bool, false

@@ -1,0 +1,5 @@
+funct: logictest
+param: int, 15
+param: float, 4.2
+gin: a, int, 1
+gin: b, float, 3.1

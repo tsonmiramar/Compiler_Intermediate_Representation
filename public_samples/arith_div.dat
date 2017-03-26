@@ -1,0 +1,3 @@
+funct: arith
+param: float, 19.0
+param: float, 2.5

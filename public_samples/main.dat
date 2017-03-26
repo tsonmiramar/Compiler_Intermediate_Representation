@@ -1,0 +1,5 @@
+funct: main
+param: int, 1
+param: int, 2
+param: int, 3
+gin: a, int, 20
