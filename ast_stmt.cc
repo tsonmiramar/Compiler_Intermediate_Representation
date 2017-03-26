@@ -317,8 +317,13 @@ void ReturnStmt::PrintChildren(int indentLevel) {
 }
 
 void ReturnStmt::Emit(){
+	ArrayAccess* arr_expr = dynamic_cast<ArrayAccess*>(expr);
 	if (expr != NULL ){
 		expr->Emit();
+		if ( arr_expr != NULL ){
+			expr->llvm_val = new llvm::LoadInst(expr->llvm_val,"",irgen->GetBasicBlock());
+		}
+
 		llvm::ReturnInst::Create(*irgen->GetContext(), expr->llvm_val, irgen->GetBasicBlock());
 	}
 	else{

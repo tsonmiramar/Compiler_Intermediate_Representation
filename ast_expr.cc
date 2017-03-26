@@ -530,7 +530,7 @@ void LogicalExpr::ops_perform(const char* opsTok, bool doPrefix){
 
         this->type = Type::boolType;
 
-        if ( strcmp(opsTok,"&&") ){
+        if ( strcmp(opsTok,"&&") == 0){
                 this->llvm_val = llvm::BinaryOperator::CreateAnd(left->llvm_val, right->llvm_val, "", irgen->GetBasicBlock());
         }
         else /* ( opsTok == "||" )*/ {
